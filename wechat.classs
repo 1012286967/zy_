@@ -1,0 +1,395 @@
+<?php
+/**
+  * wechat php test
+  */
+
+//define your token
+// 定义Token值，与微信公众平台验证的Token一致
+define("TOKEN", "itcast");  
+// 实例$wechatObj对象
+$wechatObj = new wechatCallbackapiTest();
+// 验证服务器的方法，注意：验证成功之后注视掉，也就说只需要验证一次！
+// $wechatObj->valid();  
+// 开启消息自动回复
+$wechatObj->responseMsg(); 
+
+class wechatCallbackapiTest
+{
+    public function responseMsg()
+    {
+        /**
+         * 处理微信服务器发送过来xml数据
+         */
+        // 和get、post一样获取数据，只不过$GLOBALS能获取xml数据！
+        // 获取微信服务器发送过来的xml数据
+		$postStr = $GLOBALS["HTTP_RAW_POST_DATA"];
+
+        // 安全处理：禁止引用外部xml实体， 防止XXE漏洞，也就是XML 实体扩展攻击
+        // http://www.thinkphp.cn/topic/37740.html
+        libxml_disable_entity_loader(true);
+        // 将获取xml数据转成simple对象
+        $postObj = simplexml_load_string($postStr, 'SimpleXMLElement', LIBXML_NOCDATA);
+        $fromUsername = $postObj->FromUserName; // 微信用户名
+        $toUsername = $postObj->ToUserName;     // 公共号帐号
+        $keyword = trim($postObj->Content);     // 用户发送的消息(文本.....)
+        $time = time(); // 时间戳
+
+        /**
+         * 服务器响应消息
+         */
+        switch ($postObj->MsgType) {
+            case 'event': # 代表一个事件操作
+                // 事件类型，subscribe(订阅)、unsubscribe(取消订阅)
+                if($postObj->Event == 'subscribe'){
+                    $this->sendText($fromUsername, $toUsername, "欢迎大爷光临.....");
+                }
+                // 菜单事件
+                if($postObj->Event == 'CLICK' && $postObj->EventKey == 'V1001_TODAY_MUSIC'){
+                    $this->sendText($fromUsername, $toUsername, '你想听歌曲?');
+                }
+                else if($postObj->Event == 'CLICK' && $postObj->EventKey == '110'){
+                    $this->sendText($fromUsername, $toUsername, "疼!");
+                }
+                else if($postObj->Event == 'CLICK' && $postObj->EventKey == 'V1001_GOOD'){
+                    $this->sendText($fromUsername, $toUsername, "ThankYou!");
+                }
+                break;
+            case "text":
+                // 通过用户要什么，回复对应的数据
+                if($keyword == '来文本'){
+                    $this->sendText($fromUsername, $toUsername, "文本来啦!");
+                }
+                else if($keyword == '来图片'){
+                    $this->sendImg($fromUsername, $toUsername);
+                }
+                else if($keyword == '视频'){
+                    $this->sendVideo($fromUsername, $toUsername, "瓜娃子", "搞笑的....");
+                }
+                else if($keyword == '来音乐'){
+                    $this->sendMusic($fromUsername, $toUsername, "歌曲", "好听的...");
+                }
+                else if($keyword == '单图文'){
+                    //$this->sendArticle($fromUsername, $toUsername);
+
+                    //使用图文优化代码回复
+                    $articles = array(
+                        array(
+                            'title'         => '去哪玩',
+                            'description'   => '赶紧嗨呀....',
+                            'picurl'        => 'http://39.104.56.199/liujian/num1.jpg',
+                            'url'           => 'http://www.baidu.com'
+                        )
+                    );
+                    $this->sendImgArticle($fromUsername, $toUsername, $articles);
+                }
+                else if($keyword == '多图文'){
+                    //$this->sendArticleN($fromUsername, $toUsername);
+                    //使用图文优化代码回复
+                    $articles = [
+                        [
+                            'title'         => '听说你最近水逆？教你一招快速转运！',
+                            'description'   => 'Ok',
+                            'picurl'        => 'http://39.104.56.199/liujian/tools/img/num2.jpg',
+                            'url'           => 'https://www.itcast.cn'
+                        ],
+                        [
+                            'title'         => '明年祝你们发大财...红包赶紧拿来..',
+                            'description'   => 'Ok',
+                            'picurl'        => 'http://39.104.56.199/liujian/tools/img/b1.jpg',
+                            'url'           => 'https://www.itcast.cn'
+                        ],
+                    ];
+                    $this->sendImgArticle($fromUsername, $toUsername, $articles);
+                }
+                break;
+            case "image":
+                $this->sendText($fromUsername, $toUsername, "图片消息1");
+                break;
+            case "voice":
+                $this->sendText($fromUsername, $toUsername, "语音消息1");
+                break;
+            case "video":
+                $this->sendText($fromUsername, $toUsername, "视频消息1");
+                break;
+            case "location":
+                $this->sendText($fromUsername, $toUsername, "地理位置消息1");
+                break;
+            case "link":
+                $this->sendText($fromUsername, $toUsername, "链接消息1");
+                break;
+            default:
+                $this->sendText($fromUsername, $toUsername, "你发的什么呀?");
+                break;
+        }
+    }
+    /**
+     * 回复文本消息
+     * @param  string $fromUsername 微信用户
+     * @param  string $toUsername   微信公众帐号
+     * @param  string $content      回复文本的内容
+     */
+    public function sendText($fromUsername, $toUsername, $content)
+    {
+        $textTpl = "<xml>
+                        <ToUserName><![CDATA[%s]]></ToUserName>
+                        <FromUserName><![CDATA[%s]]></FromUserName>
+                        <CreateTime>%s</CreateTime>
+                        <MsgType><![CDATA[text]]></MsgType>
+                        <Content><![CDATA[%s]]></Content>
+                        <FuncFlag>0</FuncFlag>
+                    </xml>"; 
+        $resultStr = sprintf($textTpl, $fromUsername, $toUsername, time(), $content);
+        echo $resultStr;
+    }
+    /**
+     * 回复图片消息
+     * @param  string $fromUsername 微信用户
+     * @param  string $toUsername   微信公众帐号
+     */
+    public function sendImg($fromUsername, $toUsername){
+        $imgTpl =  "<xml>
+                        <ToUserName><![CDATA[%s]]></ToUserName>
+                        <FromUserName><![CDATA[%s]]></FromUserName>
+                        <CreateTime>%s</CreateTime>
+                        <MsgType><![CDATA[image]]></MsgType>
+                        <Image>
+                            <MediaId><![CDATA[%s]]></MediaId>
+                        </Image>
+                    </xml>";
+        $media_id = 'E46s7VVIH0u7abvW3O2cYDMatCgEpjQUhQnbERxj4oP41C3ASqnS0PvDINmkYVGE';
+        $resultStr = sprintf($imgTpl, $fromUsername, $toUsername, time(), $media_id);
+        echo $resultStr;
+    }
+    /**
+     * 回复视频消息
+     * @param  string $fromUsername 微信用户
+     * @param  string $toUsername   微信公众帐号
+     * @param  string $title        视频标题
+     * @param  string $description  视频描述
+     */
+    public function sendVideo($fromUsername, $toUsername, $title, $description){
+        $videoTpl =  "<xml>
+                        <ToUserName><![CDATA[%s]]></ToUserName>
+                        <FromUserName><![CDATA[%s]]></FromUserName>
+                        <CreateTime>%s</CreateTime>
+                        <MsgType><![CDATA[video]]></MsgType>
+                        <Video>
+                            <MediaId><![CDATA[%s]]></MediaId>
+                            <Title><![CDATA[%s]]></Title>
+                            <Description><![CDATA[%s]]></Description>
+                        </Video> 
+                    </xml>";
+        $media_id = 'l7IT3avFt_S19UK4kceJuwSgoRFjm0s7_1yGmKvCkIRkpQVtTbDgtALgrlPMsLWM';
+        $resultStr = sprintf($videoTpl, $fromUsername, $toUsername, time(), $media_id, $title, $description);
+        echo $resultStr;
+    }
+    /**
+     * 回复音乐消息
+     * @param  string $fromUsername 微信用户
+     * @param  string $toUsername   微信公众帐号
+     * @param  string $title        音乐标题
+     * @param  string $description  音乐描述
+     */
+    public function sendMusic($fromUsername, $toUsername, $title, $description){
+        $musicTpl =  "<xml>
+                        <ToUserName><![CDATA[%s]]></ToUserName>
+                        <FromUserName><![CDATA[%s]]></FromUserName>
+                        <CreateTime>%s</CreateTime>
+                        <MsgType><![CDATA[music]]></MsgType>
+                        <Music>
+                            <Title><![CDATA[%s]]></Title>
+                            <Description><![CDATA[%s]]></Description>
+                            <MusicUrl><![CDATA[%s]]></MusicUrl>
+                            <HQMusicUrl><![CDATA[%s]]></HQMusicUrl>
+                            <ThumbMediaId><![CDATA[%s]]></ThumbMediaId>
+                        </Music>
+                    </xml>";
+        $musicUrl = 'http://39.104.56.199/liujian/music.mp3'; // 音乐在自定义服务器的url地址
+        // 音乐的缩略图
+        $thumbMediaId = 'hbNA4whRIYHxbGOlH_6vyBTfvfDJDaJK_9KFydimKe-Cay5UQ1_dXNqnkqOni0G6';
+        $resultStr = sprintf($musicTpl, $fromUsername, $toUsername, time(), $title, $description, $musicUrl, $musicUrl, $thumbMediaId);
+        //file_put_contents("music.xml", $resultStr);
+        echo $resultStr;
+    }
+    /**
+     * 回复单图文消息
+     * @param  string $fromUsername 微信用户
+     * @param  string $toUsername   微信公众帐号
+     */
+    public function sendArticle($fromUsername, $toUsername)
+    {
+        $artTpl  = "<xml>
+                        <ToUserName><![CDATA[%s]]></ToUserName>
+                        <FromUserName><![CDATA[%s]]></FromUserName>
+                        <CreateTime>%s</CreateTime>
+                        <MsgType><![CDATA[news]]></MsgType>
+                        <ArticleCount>1</ArticleCount>
+                        <Articles>
+                            <item>
+                                <Title><![CDATA[%s]]></Title> 
+                                <Description><![CDATA[%s]]></Description>
+                                <PicUrl><![CDATA[%s]]></PicUrl>
+                                <Url><![CDATA[%s]]></Url>
+                            </item>
+                        </Articles>
+                    </xml>";
+        $title = "去哪玩?";
+        $description = "赶紧嗨.....";
+        $picurl = "http://39.104.56.199/liujian/num1.jpg";
+        $url = "http://www.baidu.com";
+        $resultStr = sprintf($artTpl, $fromUsername, $toUsername, time(), $title, $description, $picurl, $url);
+        echo $resultStr;
+    }
+     /**
+     * 回复多图文消息
+     * @param  string $fromUsername 微信用户
+     * @param  string $toUsername   微信公众帐号
+     */
+    public function sendArticleN($fromUsername, $toUsername)
+    {
+        $arr = array(
+            array(
+                'title' => '文章1',
+                'description' => '描述1',
+                'picurl' => 'http://39.104.56.199/liujian/tools/img/b1.jpg',
+                'url' => 'http://www.baidu.com',
+            ),
+            array(
+                'title' => '文章2',
+                'description' => '描述2',
+                'picurl' => 'http://39.104.56.199/liujian/tools/img/one.png',
+                'url' => 'http://www.baidu.com',
+            ),
+            array(
+                'title' => '文章3',
+                'description' => '描述3',
+                'picurl' => 'http://39.104.56.199/liujian/tools/img/two.png',
+                'url' => 'http://www.baidu.com',
+            ),
+            array(
+                'title' => '文章4',
+                'description' => '描述4',
+                'picurl' => 'http://39.104.56.199/liujian/tools/img/three.png',
+                'url' => 'http://www.baidu.com',
+            ),
+        );
+        $artTpl  = "<xml>
+                        <ToUserName><![CDATA[%s]]></ToUserName>
+                        <FromUserName><![CDATA[%s]]></FromUserName>
+                        <CreateTime>%s</CreateTime>
+                        <MsgType><![CDATA[news]]></MsgType>
+                        <ArticleCount>%s</ArticleCount>
+                        <Articles>";
+                foreach($arr as $val){
+                    $artTpl .= "<item>
+                                <Title><![CDATA[{$val['title']}]]></Title> 
+                                <Description><![CDATA[{$val['description']}]]></Description>
+                                <PicUrl><![CDATA[{$val['picurl']}]]></PicUrl>
+                                <Url><![CDATA[{$val['url']}]]></Url>
+                            </item>";
+                }
+
+            $artTpl .= "</Articles>
+                    </xml>";
+        $resultStr = sprintf($artTpl, $fromUsername, $toUsername, time(), count($arr));
+        //file_put_contents("artss.xml", $resultStr);
+        echo $resultStr;
+    }
+    /**
+     * 回复多图文消息(优化的代码)
+     * @param  string $fromUsername 微信用户
+     * @param  string $toUsername   微信公众帐号
+     * @param  array  $arr          图文数据
+     * array(
+            array(
+                'title' => '文章1',
+                'description' => '描述1',
+                'picurl' => 'http://39.104.56.199/liujian/tools/img/b1.jpg',
+                'url' => 'http://www.baidu.com',
+            ),
+            array(
+                'title' => '文章2',
+                'description' => '描述2',
+                'picurl' => 'http://39.104.56.199/liujian/tools/img/one.png',
+                'url' => 'http://www.baidu.com',
+            )
+            ........
+        );
+     */
+    public function sendImgArticle($fromUsername, $toUsername, $arr)
+    {
+        $artTpl  = "<xml>
+                        <ToUserName><![CDATA[%s]]></ToUserName>
+                        <FromUserName><![CDATA[%s]]></FromUserName>
+                        <CreateTime>%s</CreateTime>
+                        <MsgType><![CDATA[news]]></MsgType>
+                        <ArticleCount>%s</ArticleCount>
+                        <Articles>";
+                foreach($arr as $val){
+                    $artTpl .= "<item>
+                                <Title><![CDATA[{$val['title']}]]></Title> 
+                                <Description><![CDATA[{$val['description']}]]></Description>
+                                <PicUrl><![CDATA[{$val['picurl']}]]></PicUrl>
+                                <Url><![CDATA[{$val['url']}]]></Url>
+                            </item>";
+                }
+            $artTpl .= "</Articles>
+                    </xml>";
+        $resultStr = sprintf($artTpl, $fromUsername, $toUsername, time(), count($arr));
+        echo $resultStr;
+    }
+
+	
+    /**
+     * 验证Token
+     */
+    public function valid()
+    {
+        // 随机字符串
+        $echoStr = $_GET["echostr"];
+
+        // 调用checkSignature()方法
+        if($this->checkSignature()){
+            echo $echoStr;
+            exit;
+        }
+    }
+    /**
+     * 验证加密签名
+     */
+	private function checkSignature()
+	{
+        // you must define TOKEN by yourself
+        // 检测是否定义TOKEN常量
+        if (!defined("TOKEN")) {
+            throw new Exception('TOKEN is not defined!');
+        }
+        
+        // 微信加密签名，signature结合了开发者填写的token参数和请求中的timestamp参数、nonce参数。
+        $signature = $_GET["signature"];
+        // 获取时间戳
+        $timestamp = $_GET["timestamp"];
+        // 随机数
+        $nonce = $_GET["nonce"];
+        		
+		$token = TOKEN; // 将TOKEN常量值赋予变量
+        // 将$token $timestamp $nonce 放在数组中
+		$tmpArr = array($token, $timestamp, $nonce);
+        // use SORT_STRING rule
+        // 将数组进行排序
+		sort($tmpArr, SORT_STRING);
+        // 将数组中的元素拼接成字符串
+		$tmpStr = implode( $tmpArr );
+        // 将拼接的字符串进行哈希加密
+		$tmpStr = sha1( $tmpStr );
+		
+        // 验证微信加密签名
+		if( $tmpStr == $signature ){
+			return true;
+		}else{
+			return false;
+		}
+	}
+}
+
+?>
